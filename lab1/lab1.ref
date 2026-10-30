@@ -1,0 +1,566 @@
+$ENTRY Go {
+  = <Generate 0 <Lower 0 <Rules 0 <PruneRules <ReadRules <Card>>>>>>;
+}
+
+ReadRules {
+  0 =;
+  e.Line 0 = <ParseLine <Trim e.Line>>;
+  e.Line = <ParseLine <Trim e.Line>> <ReadRules <Card>>;
+}
+
+Trim {
+  ' ' e.Text = <Trim e.Text>;
+  '\t' e.Text = <Trim e.Text>;
+  e.Text ' ' = <Trim e.Text>;
+  e.Text '\t' = <Trim e.Text>;
+  e.Text '\r' = <Trim e.Text>;
+  e.Text = e.Text;
+}
+
+ParseLine {
+  =;
+  e.Left '=' e.Right,
+    <Trim e.Left> : '^' e.Pattern '$',
+    <Trim e.Right> : '^' e.Result '$',
+    <Variable e.Pattern> : s.Variable
+    = ((<Normalize s.Variable e.Pattern>)
+       (<Normalize s.Variable e.Result>));
+  e.Invalid = <Invalid>;
+}
+
+Variable {
+  = None;
+  s.Char e.Rest,
+    <Letters> : e.Before s.Char e.After
+    = <Variable e.Rest>;
+  s.Char e.Rest,
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ' : e.Before s.Char e.After
+    = s.Char;
+  e.Invalid = <Invalid>;
+}
+
+Normalize {
+  s.Variable =;
+  s.Variable s.Variable e.Rest = Var <Normalize s.Variable e.Rest>;
+  s.Variable s.Char e.Rest,
+    <Letters> : e.Before s.Char e.After
+    = s.Char <Normalize s.Variable e.Rest>;
+  e.Invalid = <Invalid>;
+}
+
+Invalid {
+  = <Prout 'ERROR: expected ^pattern$ = ^pattern$, one variable per rule'>
+      <Exit 1>;
+}
+
+Label {
+  s.Rule e.Phase = 'R' <Symb s.Rule> e.Phase;
+}
+
+Rules {
+  s.Rule = (Label (<Label s.Rule 'I'>)) (Jump ('HALT'));
+  s.Rule ((e.Left) (e.Right)) e.Rest
+    = (Label (<Label s.Rule 'I'>))
+      <Restore s.Rule>
+      (Put 'P' '!')
+      <Match s.Rule e.Left>
+      (Label (<Label s.Rule 'WIN'>))
+      <Build s.Rule 0 <Reverse e.Right>>
+      (Publish)
+      <Rules <Add s.Rule 1> e.Rest>;
+}
+
+Restore {
+  0 =;
+  s.Rule = (Unmark);
+}
+
+Match {
+  s.Rule e.Prefix Var e.Rest
+    = <MarkTail s.Rule 0 e.Prefix>
+      (Put 'A' 'P') (Put 'Z' 'A') (Put 'H' '!')
+      <SkipConstants (<Label <Add s.Rule 1> 'I'>) e.Prefix Var e.Rest>
+      (Label (<Label s.Rule 'DIV'>))
+      (AtEnd 'H' (<Label s.Rule 'DONE'>) (<Label s.Rule 'GROUP'>))
+      (Label (<Label s.Rule 'GROUP'>))
+      <SkipGroup (<Label <Add s.Rule 1> 'I'>) e.Prefix Var e.Rest>
+      (Step 'Z' (<Label <Add s.Rule 1> 'I'>))
+      (Jump (<Label s.Rule 'DIV'>))
+      (Label (<Label s.Rule 'DONE'>))
+      (Put 'P' 'Z')
+      <MarkTail s.Rule 0 e.Rest>
+      <CheckPeriod s.Rule e.Rest>;
+  s.Rule e.Constant
+    = <MarkTail s.Rule 0 e.Constant>
+      (AtEnd 'P' (<Label s.Rule 'WIN'>) (<Label <Add s.Rule 1> 'I'>));
+}
+
+CheckPeriod {
+  s.Rule e.Before Var e.After
+    = (Put 'H' 'A') (Put 'P' 'Z')
+      (Label (<Label s.Rule 'PERIOD'>))
+      (CompareVisible 'H' 'P'
+        (<Label s.Rule 'WIN'>) (<Label <Add s.Rule 1> 'I'>))
+      (Jump (<Label s.Rule 'PERIOD'>));
+  s.Rule e.Constant =;
+}
+
+SkipConstants {
+  (e.Fail) =;
+  (e.Fail) Var e.Rest = <SkipConstants (e.Fail) e.Rest>;
+  (e.Fail) s.Char e.Rest
+    = (Step 'H' (e.Fail)) <SkipConstants (e.Fail) e.Rest>;
+}
+
+SkipGroup {
+  (e.Fail) =;
+  (e.Fail) Var e.Rest
+    = (Step 'H' (e.Fail)) <SkipGroup (e.Fail) e.Rest>;
+  (e.Fail) s.Char e.Rest = <SkipGroup (e.Fail) e.Rest>;
+}
+
+MarkTail {
+  s.Rule s.Position =;
+  s.Rule s.Position Var e.Rest
+    = (Put 'H' 'A')
+      (Label (<Label s.Rule 'M' <Symb s.Position> 'LOOP'>))
+      (StepUntil 'H' 'Z' (<Label s.Rule 'M' <Symb s.Position> 'END'>))
+      (Step 'P' (<Label <Add s.Rule 1> 'I'>))
+      (Jump (<Label s.Rule 'M' <Symb s.Position> 'LOOP'>))
+      (Label (<Label s.Rule 'M' <Symb s.Position> 'END'>))
+      <MarkTail s.Rule <Add s.Position 1> e.Rest>;
+  s.Rule s.Position s.Char e.Rest
+    = (Mark 'P' s.Char (<Label <Add s.Rule 1> 'I'>))
+      <MarkTail s.Rule <Add s.Position 1> e.Rest>;
+}
+
+Build {
+  s.Rule s.Position =;
+  s.Rule s.Position Var e.Rest
+    = (Put 'H' 'Z')
+      (Label (<Label s.Rule 'B' <Symb s.Position> 'LOOP'>))
+      (CopyBack 'H' 'A' (<Label s.Rule 'B' <Symb s.Position> 'END'>))
+      (Jump (<Label s.Rule 'B' <Symb s.Position> 'LOOP'>))
+      (Label (<Label s.Rule 'B' <Symb s.Position> 'END'>))
+      <Build s.Rule <Add s.Position 1> e.Rest>;
+  s.Rule s.Position e.Text Var e.Rest
+    = (PrependText <Reverse e.Text>)
+      <Build s.Rule <Add s.Position 1> Var e.Rest>;
+  s.Rule s.Position e.Text = (PrependText <Reverse e.Text>);
+}
+
+Reverse {
+  e.Input = <DoReverse () e.Input>;
+}
+
+DoReverse {
+  (e.Result) = e.Result;
+  (e.Result) t.Head e.Rest = <DoReverse (t.Head e.Result) e.Rest>;
+}
+
+Generate {
+  s.Start e.Graph
+    = <PrintRules
+        (<UnusedTags (<UsedTagLetters e.Graph>) (<Letters>) <Tags>>)
+        <Envelope s.Start> <EmitGraph e.Graph>
+        <Procedures () <Used e.Graph>> <Returns>
+      >;
+}
+
+Rule {
+  (e.Left) (e.Right) = ((e.Left) (e.Right));
+}
+
+UsedTagLetters {
+  =;
+  (Call (e.Entry) (Mark s.Marker s.Char) e.Cases) e.Rest
+    = s.Char <UsedTagLetters e.Rest>;
+  t.Other e.Rest = <UsedTagLetters e.Rest>;
+}
+
+UnusedTags {
+  (e.UsedLetters) () =;
+  (e.UsedLetters) (s.Char e.Letters) s.Tag e.Tags,
+    e.UsedLetters : e.UsedLetters-B s.Char e.UsedLetters-E
+    = <UnusedTags (e.UsedLetters) (e.Letters) e.Tags>;
+  (e.UsedLetters) (s.Char e.Letters) s.Tag e.Tags
+    = s.Tag <UnusedTags (e.UsedLetters) (e.Letters) e.Tags>;
+}
+
+PhysicalSymbols {
+  =;
+  '@' e.Name ';' e.Rest = <PhysicalSymbols e.Rest>;
+  s.Char e.Rest = s.Char <PhysicalSymbols e.Rest>;
+}
+
+PrintRules {
+  (e.UnusedTags) =;
+  (e.UnusedTags) ((e.Left) (e.Right)) e.Rest,
+    <PhysicalSymbols e.Left> : e.Before s.Tag e.After,
+    e.UnusedTags : e.UnusedTags-B s.Tag e.UnusedTags-E
+    = <PrintRules (e.UnusedTags) e.Rest>;
+  (e.UnusedTags) ((e.Left) (e.Right)) e.Rest
+    = <Prout e.Left ' -> ' e.Right> <PrintRules (e.UnusedTags) e.Rest>;
+}
+
+Letters {
+  = 'abcdefghijklmnopqrstuvwxyz';
+}
+
+Tags {
+  = 'BCDEFGIJKLMNOQRSTUVWXY0123';
+}
+
+Marks {
+  = 'AZPH';
+}
+
+Symbols {
+  = <Letters> <Tags>;
+}
+
+State {
+  s.Index = '@Q' <Symb s.Index> ';';
+}
+
+Named {
+  e.Name = '@' e.Name ';';
+}
+
+Phase {
+  ('@' e.Name ';') e.Suffix = '@' e.Name '-' e.Suffix ';';
+}
+
+Proc {
+  (s.Kind e.Args) = '@OP-' <Upper <Explode s.Kind>> <Args e.Args> ';';
+}
+
+Args {
+  =;
+  '!' e.Rest = '-HOME' <Args e.Rest>;
+  s.Char e.Rest = '-' <Upper s.Char> <Args e.Rest>;
+}
+
+Lower {
+  s.Index =;
+  s.Index t.Instruction e.Rest
+    = <Instruction (<State s.Index>) (<State <Add s.Index 1>>) t.Instruction>
+      <Lower <Add s.Index 1> e.Rest>;
+}
+
+Instruction {
+  (e.Entry) (e.Next) (Label (e.Name))
+    = (Edge (e.Entry) (<Named e.Name>))
+      (Edge (<Named e.Name>) (e.Next));
+  (e.Entry) (e.Next) (Jump (e.Name))
+    = (Edge (e.Entry) (<Named e.Name>));
+  (e.Entry) (e.Next) (Publish) = (Publish (e.Entry));
+  (e.Entry) (e.Next) (Put s.Marker s.Target)
+    = (Call (e.Entry) (Put s.Marker s.Target) (('OK') (e.Next)));
+  (e.Entry) (e.Next) (Unmark)
+    = (Call (e.Entry) (Unmark) (('OK') (e.Next)));
+  (e.Entry) (e.Next) (PrependText e.Text)
+    = (Call (e.Entry) (PrependText e.Text) (('OK') (e.Next)));
+  (e.Entry) (e.Next) (Step s.Marker (e.Empty))
+    = (Call (e.Entry) (Step s.Marker)
+        (('ZERO') (<Named e.Empty>)) (('OK') (e.Next)));
+  (e.Entry) (e.Next) (StepUntil s.Marker s.Bound (e.End))
+    = (Call (e.Entry) (StepUntil s.Marker s.Bound)
+        (('ZERO') (<Named e.End>)) (('OK') (e.Next)));
+  (e.Entry) (e.Next) (Mark s.Marker s.Char (e.Fail))
+    = (Call (e.Entry) (Mark s.Marker s.Char)
+        (('FAIL') (<Named e.Fail>)) (('OK') (e.Next)));
+  (e.Entry) (e.Next) (AtEnd s.Marker (e.Yes) (e.No))
+    = (Call (e.Entry) (AtEnd s.Marker)
+        (('Y') (<Named e.Yes>)) (('N') (<Named e.No>)));
+  (e.Entry) (e.Next) (CompareVisible s.First s.Second (e.End) (e.Fail))
+    = (Call (e.Entry) (ReadVisible s.Second)
+        (('ZERO') (<Named e.End>)) <Carried (e.Entry) <Letters>>)
+      <CompareCalls (e.Entry) (e.Next) (<Named e.Fail>) s.First <Letters>>;
+  (e.Entry) (e.Next) (CopyBack s.Marker s.Bound (e.End))
+    = (Call (e.Entry) (ReadBackUntil s.Marker s.Bound)
+        (('ZERO') (<Named e.End>)) <Carried (e.Entry) <Letters>>)
+      <PrependCalls (e.Entry) (e.Next) <Letters>>;
+}
+
+Expected {
+  s.Char (e.Yes) (e.No) =;
+  s.Char (e.Yes) (e.No) s.Char e.Rest
+    = (('C' <Upper s.Char>) (e.Yes)) <Expected s.Char (e.Yes) (e.No) e.Rest>;
+  s.Expected (e.Yes) (e.No) s.Char e.Rest
+    = (('C' <Upper s.Char>) (e.No))
+      <Expected s.Expected (e.Yes) (e.No) e.Rest>;
+}
+
+Carried {
+  (e.Entry) =;
+  (e.Entry) s.Char e.Rest
+    = (('C' <Upper s.Char>) (<Phase (e.Entry) 'C' <Upper s.Char>>))
+      <Carried (e.Entry) e.Rest>;
+}
+
+CompareCalls {
+  (e.Entry) (e.Next) (e.Fail) s.Marker =;
+  (e.Entry) (e.Next) (e.Fail) s.Marker s.Char e.Rest
+    = (Call (<Phase (e.Entry) 'C' <Upper s.Char>>) (ReadVisible s.Marker)
+        (('ZERO') (e.Fail)) <Expected s.Char (e.Next) (e.Fail) <Letters>>)
+      <CompareCalls (e.Entry) (e.Next) (e.Fail) s.Marker e.Rest>;
+}
+
+PrependCalls {
+  (e.Entry) (e.Next) =;
+  (e.Entry) (e.Next) s.Char e.Rest
+    = (Call (<Phase (e.Entry) 'C' <Upper s.Char>>) (PrependText s.Char)
+        (('OK') (e.Next)))
+      <PrependCalls (e.Entry) (e.Next) e.Rest>;
+}
+
+EmitGraph {
+  =;
+  (Edge (e.From) (e.To)) e.Rest
+    = <Rule ('!' e.From ':') ('!' e.To ':')> <EmitGraph e.Rest>;
+  (Publish (e.Entry)) e.Rest
+    = <Rule ('!' e.Entry ':') ('!@ERASE;')> <EmitGraph e.Rest>;
+  (Call (e.Entry) t.Operation e.Cases) e.Rest
+    = <Rule ('!' e.Entry ':')
+        ('!' <Phase (e.Entry) 'K'> ':' <Proc t.Operation>)>
+      <Dispatch (<Phase (e.Entry) 'K'>) e.Cases> <EmitGraph e.Rest>;
+}
+
+Dispatch {
+  (e.Continuation) =;
+  (e.Continuation) ((e.Result) (e.Target)) e.Rest
+    = <Rule ('!' e.Continuation '@RET-' e.Result ';') ('!' e.Target)>
+      <Dispatch (e.Continuation) e.Rest>;
+}
+
+Used {
+  =;
+  (Call (e.Entry) t.Operation e.Cases) e.Rest = t.Operation <Used e.Rest>;
+  t.Other e.Rest = <Used e.Rest>;
+}
+
+Procedures {
+  (e.Seen) =;
+  (e.Seen) t.Operation e.Rest,
+    e.Seen : e.Before t.Operation e.After
+    = <Procedures (e.Seen) e.Rest>;
+  (e.Seen) t.Operation e.Rest
+    = <Procedure (<Proc t.Operation>) t.Operation>
+      <Procedures (e.Seen t.Operation) e.Rest>;
+}
+
+Walk {
+  s.Direction (e.Cursor) =;
+  Right (e.Cursor) s.Char e.Rest
+    = <Rule (e.Cursor s.Char) (s.Char e.Cursor)>
+      <Walk Right (e.Cursor) e.Rest>;
+  Left (e.Cursor) s.Char e.Rest
+    = <Rule (s.Char e.Cursor) (e.Cursor s.Char)>
+      <Walk Left (e.Cursor) e.Rest>;
+}
+
+Without {
+  s.Char =;
+  s.Char s.Char e.Rest = <Without s.Char e.Rest>;
+  s.Char s.Other e.Rest = s.Other <Without s.Char e.Rest>;
+}
+
+Seek {
+  (e.Cursor) s.Marker
+    = <Walk Right (e.Cursor) <Symbols> <Without s.Marker <Marks>>>;
+}
+
+Procedure {
+  (e.Cursor) (Step s.Marker)
+    = <Seek (e.Cursor) s.Marker>
+      <Rule (e.Cursor s.Marker) (<Phase (e.Cursor) 'GAP'>)>
+      <Walk Right (<Phase (e.Cursor) 'GAP'>) <Marks>>
+      <StepSymbols (<Phase (e.Cursor) 'GAP'>) s.Marker <Symbols>>
+      <Rule (<Phase (e.Cursor) 'GAP'> '#') (s.Marker '@RET-ZERO;#')>;
+  (e.Cursor) (ReadVisible s.Marker)
+    = <Seek (e.Cursor) s.Marker>
+      <Rule (e.Cursor s.Marker) (<Phase (e.Cursor) 'GAP'>)>
+      <Walk Right (<Phase (e.Cursor) 'GAP'>) <Marks> <Tags>>
+      <ReadLetters (<Phase (e.Cursor) 'GAP'>) s.Marker <Letters>>
+      <Rule (<Phase (e.Cursor) 'GAP'> '#') (s.Marker '@RET-ZERO;#')>;
+  (e.Cursor) (Mark s.Marker s.Char)
+    = <Seek (e.Cursor) s.Marker>
+      <Rule (e.Cursor s.Marker) (<Phase (e.Cursor) 'GAP'>)>
+      <Walk Right (<Phase (e.Cursor) 'GAP'>) <Marks>>
+      <MarkSymbols (<Phase (e.Cursor) 'GAP'>) s.Marker s.Char
+        (<Letters>) <Tags>>
+      <Rule (<Phase (e.Cursor) 'GAP'> '#') (s.Marker '@RET-FAIL;#')>;
+  (e.Cursor) (AtEnd s.Marker)
+    = <Seek (e.Cursor) s.Marker>
+      <Rule (e.Cursor s.Marker) (s.Marker <Phase (e.Cursor) 'GAP'>)>
+      <Walk Right (<Phase (e.Cursor) 'GAP'>) <Marks>>
+      <Answer (<Phase (e.Cursor) 'GAP'>) ('N') <Symbols>>
+      <Answer (<Phase (e.Cursor) 'GAP'>) ('Y') '#'>;
+  (e.Cursor) (Put s.Marker s.Target)
+    = <Seek (e.Cursor) s.Marker>
+      <Rule (e.Cursor s.Marker) (<Phase (e.Cursor) 'BACK'>)>
+      <Rule (e.Cursor '#') (<Phase (e.Cursor) 'BACK'> '#')>
+      <Walk Left (<Phase (e.Cursor) 'BACK'>) <Symbols> <Marks>>
+      <PutTarget (<Phase (e.Cursor) 'BACK'>) s.Marker s.Target>;
+  (e.Cursor) (StepUntil s.Marker s.Bound)
+    = <Seek (e.Cursor) s.Marker>
+      <Rule (e.Cursor s.Marker) (<Phase (e.Cursor) 'LEFT'>)>
+      <Walk Left (<Phase (e.Cursor) 'LEFT'>) <Marks>>
+      <TurnGap (<Phase (e.Cursor) 'LEFT'>) (<Phase (e.Cursor) 'GAP'>)
+        ':' <Symbols>>
+      <Walk Right (<Phase (e.Cursor) 'GAP'>) <Without s.Bound <Marks>>>
+      <Rule (<Phase (e.Cursor) 'GAP'> s.Bound)
+        (s.Marker s.Bound '@RET-ZERO;')>
+      <StepSymbols (<Phase (e.Cursor) 'GAP'>) s.Marker <Symbols>>;
+  (e.Cursor) (ReadBackUntil s.Marker s.Bound)
+    = <Seek (e.Cursor) s.Marker>
+      <Rule (e.Cursor s.Marker) (<Phase (e.Cursor) 'RIGHT'>)>
+      <Walk Right (<Phase (e.Cursor) 'RIGHT'>) <Marks>>
+      <TurnBackGap (<Phase (e.Cursor) 'RIGHT'>)
+        (<Phase (e.Cursor) 'GAP'>) <Symbols> '#'>
+      <Walk Left (<Phase (e.Cursor) 'GAP'>) <Without s.Bound <Marks>>>
+      <Rule (s.Bound <Phase (e.Cursor) 'GAP'>)
+        (s.Bound s.Marker '@RET-ZERO;')>
+      <BackSymbols (<Phase (e.Cursor) 'GAP'>) s.Marker
+        (<Letters>) <Tags>>;
+  (e.Cursor) (Unmark)
+    = <Walk Right (e.Cursor) <Letters> <Marks>>
+      <UnmarkSymbols (e.Cursor) (<Letters>) <Tags>>
+      <Rule (e.Cursor '#') ('@RET-OK;#')>;
+  (e.Cursor) (PrependText e.Text)
+    = <Walk Right (e.Cursor) <Symbols> <Marks>>
+      <Rule (e.Cursor '#') ('@RET-OK;#' e.Text)>;
+}
+
+StepSymbols {
+  (e.Cursor) s.Marker =;
+  (e.Cursor) s.Marker s.Char e.Rest
+    = <Rule (e.Cursor s.Char) (s.Char s.Marker '@RET-OK;')>
+      <StepSymbols (e.Cursor) s.Marker e.Rest>;
+}
+
+MarkSymbols {
+  (e.Cursor) s.Marker s.Expected () =;
+  (e.Cursor) s.Marker s.Char (s.Char e.Letters) s.Tag e.Tags
+    = <Rule (e.Cursor s.Char) (s.Tag s.Marker '@RET-OK;')>
+      <MarkSymbols (e.Cursor) s.Marker s.Char (e.Letters) e.Tags>;
+  (e.Cursor) s.Marker s.Expected (s.Char e.Letters) s.Tag e.Tags
+    = <Rule (e.Cursor s.Char) (s.Char s.Marker '@RET-FAIL;')>
+      <MarkSymbols (e.Cursor) s.Marker s.Expected (e.Letters) e.Tags>;
+}
+
+UnmarkSymbols {
+  (e.Cursor) () =;
+  (e.Cursor) (s.Char e.Letters) s.Tag e.Tags
+    = <Rule (e.Cursor s.Tag) (s.Char e.Cursor)>
+      <UnmarkSymbols (e.Cursor) (e.Letters) e.Tags>;
+}
+
+BackSymbols {
+  (e.Cursor) s.Marker () =;
+  (e.Cursor) s.Marker (s.Char e.Letters) s.Tag e.Tags
+    = <Rule (s.Char e.Cursor)
+        (s.Marker '@RET-C' <Upper s.Char> ';' s.Char)>
+      <BackSymbols (e.Cursor) s.Marker (e.Letters) e.Tags>;
+}
+
+TurnBackGap {
+  (e.Right) (e.Left) =;
+  (e.Right) (e.Left) s.Char e.Rest
+    = <Rule (e.Right s.Char) (e.Left s.Char)>
+      <TurnBackGap (e.Right) (e.Left) e.Rest>;
+}
+
+PutTarget {
+  (e.Back) s.Marker '!'
+    = <Rule (':' e.Back) (':' s.Marker '@RET-OK;')>;
+  (e.Back) s.Marker s.Target,
+    <Phase (e.Back) 'FIND'> : e.Find
+    = <Rule (':' e.Back) (':' e.Find)>
+      <Seek (e.Find) s.Target>
+      <Rule (e.Find s.Target) (s.Marker s.Target '@RET-OK;')>;
+}
+
+ReadLetters {
+  (e.Cursor) s.Marker =;
+  (e.Cursor) s.Marker s.Char e.Rest
+    = <Rule (e.Cursor s.Char) (s.Char s.Marker '@RET-C' <Upper s.Char> ';')>
+      <ReadLetters (e.Cursor) s.Marker e.Rest>;
+}
+
+Answer {
+  (e.Cursor) (e.Result) =;
+  (e.Cursor) (e.Result) s.Char e.Rest
+    = <Rule (e.Cursor s.Char) ('@RET-' e.Result ';' s.Char)>
+      <Answer (e.Cursor) (e.Result) e.Rest>;
+}
+
+TurnGap {
+  (e.Left) (e.Right) =;
+  (e.Left) (e.Right) s.Char e.Rest
+    = <Rule (s.Char e.Left) (s.Char e.Right)>
+      <TurnGap (e.Left) (e.Right) e.Rest>;
+}
+
+Erase {
+  (e.Cursor) =;
+  (e.Cursor) s.Char e.Rest
+    = <Rule (e.Cursor s.Char) (e.Cursor)> <Erase (e.Cursor) e.Rest>;
+}
+
+Return {
+  (e.Status)
+    = <Walk Left ('@RET-' e.Status ';') <Symbols> <Marks>>
+      <Rule (':' '@RET-' e.Status ';') ('@RET-' e.Status ';' ':')>;
+}
+
+Returns {
+  = <Return ('OK')> <Return ('Y')> <Return ('N')> <Return ('ZERO')>
+      <Return ('FAIL')> <LetterReturns <Letters>>;
+}
+
+LetterReturns {
+  =;
+  s.Char e.Rest = <Return ('C' <Upper s.Char>)> <LetterReturns e.Rest>;
+}
+
+Envelope {
+  s.Start
+    = <Rule ('^') ('!@INIT;')>
+      <Walk Right ('@INIT;') <Letters>>
+      <Rule ('@INIT;$') ('@INITBACK;#$')>
+      <Walk Left ('@INITBACK;') <Letters>>
+      <Rule ('!@INITBACK;') ('!' <State s.Start> ':')>
+      <Erase ('@ERASE;') <Symbols> <Marks>>
+      <Rule ('!@ERASE;#') ('^')>;
+}
+
+PruneRules {
+  e.Rules = <DoPruneRules () e.Rules>;
+}
+
+DoPruneRules {
+  (e.Kept) = e.Kept;
+
+  (e.Kept) ((e.Left) (e.Right)) e.Rest,
+    e.Kept : e.Before ((e.Left) (e.EarlierRight)) e.After
+    = <DoPruneRules (e.Kept) e.Rest>;
+
+  (e.Kept) ((e.Left) (e.Right)) e.Rest,
+    e.Kept : e.Before ((e.Prefix Var e.Suffix) (e.EarlierRight)) e.After,
+    e.Left : e.Prefix e.Value e.Unused,
+    <PruneRules-Substitute (e.Value) e.Prefix Var e.Suffix> : e.Left
+    = <DoPruneRules (e.Kept) e.Rest>;
+
+  (e.Kept) t.Rule e.Rest
+    = <DoPruneRules (e.Kept t.Rule) e.Rest>;
+}
+
+PruneRules-Substitute {
+  (e.Value) =;
+  (e.Value) Var e.Rest
+    = e.Value <PruneRules-Substitute (e.Value) e.Rest>;
+  (e.Value) s.Letter e.Rest
+    = s.Letter <PruneRules-Substitute (e.Value) e.Rest>;
+}
